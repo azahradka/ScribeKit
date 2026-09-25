@@ -16,7 +16,7 @@ Used by [EchoPad](https://github.com/pieralukasz/echopad).
 
 ## Requirements
 
-macOS 14 or iOS 17, Swift 6. Models (about 600 MB for speech, 30 MB for diarization) are downloaded from Hugging Face on
+macOS 14 or iOS 17, Swift 6. Models (about 460 MB for speech, 20 MB for diarization) are downloaded from Hugging Face on
 first use and cached in `~/Library/Application Support/FluidAudio`.
 
 ## Install
