@@ -1,0 +1,49 @@
+---
+title: Models
+description: Download, load and free the speech and speaker models.
+---
+
+## Loading ahead of time
+
+Models load on first use. To download and load them before the user needs them, for example during onboarding:
+
+```swift
+try await Scribe.shared.prepare(diarization: true) { progress in
+    let percent = progress.fraction.map { " \(Int($0 * 100))%" } ?? ""
+    print("\(progress.model.rawValue):\(percent) \(progress.detail)")
+}
+```
+
+- `diarization: false` loads only the speech model.
+- `ModelProgress.model` is `.speechRecognition` or `.speakerDiarization`.
+- `fraction` is 0 to 1 when known. The speaker model reports `nil` while loading and `1` when ready.
+- `detail` is a short status, such as "Downloading model (3/7 files)…".
+
+`prepare` is safe to call repeatedly, including while a load is running: concurrent callers wait for the same load.
+
+Check the state with `isSpeechModelLoaded` and `isDiarizationModelLoaded`.
+
+## Freeing memory
+
+```swift
+await Scribe.shared.unload()
+```
+
+The next transcription loads the models again from the disk cache.
+
+## Speaker counts
+
+Passing `speakerCount` configures a separate diarizer for that count. It is created on first use and kept, so later calls with the same count are fast.
+
+## Cache
+
+| Model | Location | Size |
+| --- | --- | --- |
+| Parakeet TDT 0.6B v3 | `~/Library/Application Support/FluidAudio/Models/parakeet-tdt-0.6b-v3` | about 460 MB |
+| Speaker diarization | `~/Library/Application Support/FluidAudio/Models/speaker-diarization` | about 20 MB |
+
+In a sandboxed app the path is inside the app's container. Delete the folders to force a new download.
+
+## Hardware
+
+The speech encoder runs in 8-bit precision on the Apple Neural Engine. On Apple Silicon, transcription runs many times faster than real time.

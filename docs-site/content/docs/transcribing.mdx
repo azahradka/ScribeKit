@@ -1,0 +1,101 @@
+---
+title: Transcribing a file
+description: One audio file in, a transcript with speakers out.
+---
+
+## The shared instance
+
+`Scribe` is an actor that holds the loaded models. Use one instance for the whole app, so the models load once:
+
+```swift
+let scribe = Scribe.shared
+```
+
+`Scribe()` creates a separate instance with its own models, which is rarely what you want.
+
+## Plain text
+
+For dictation-style use, when you only need the words:
+
+```swift
+let text = try await scribe.transcribeText(url, language: "pl")
+```
+
+`words(_:language:)` returns the same result as timed `Word` values.
+
+## With speakers
+
+```swift
+let transcript = try await scribe.transcribe(url, options: .init(language: "en"))
+
+for segment in transcript.segments {
+    let name = transcript.speaker(for: segment.speakerID)?.name ?? "Unknown"
+    print("[\(TranscriptRenderer.clock(segment.start))] \(name): \(segment.text)")
+}
+```
+
+Diarization is on by default. It costs roughly one extra pass over the audio.
+
+The input is any file `AVAudioFile` can read, for example WAV, M4A, MP3 or CAF.
+
+## Options
+
+`TranscriptionOptions` controls both calls:
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `language` | `nil` | ISO 639-1 code such as `"pl"` or `"en"`. `nil` or `"auto"` detects the language. |
+| `diarize` | `true` | Label speakers. With `false`, segments have no speaker. |
+| `speakerCount` | `nil` | Exact number of speakers when you know it. Improves diarization. |
+| `localSpeakerName` | `"Me"` | Name of the microphone side in [conversation mode](/docs/conversations). |
+| `remoteSpeakerTemplate` | `"Speaker %d"` | Name of the other speakers. `%d` becomes the number. |
+
+```swift
+let options = TranscriptionOptions(language: "de", speakerCount: 3,
+                                   remoteSpeakerTemplate: "Sprecher %d")
+```
+
+### Languages
+
+Parakeet v3 detects the language on its own. The hint mainly stops words from being written in the wrong script, for example Polish words in Cyrillic. An unknown code throws `ScribeError.unsupportedLanguage`.
+
+`Scribe.supportedLanguages` lists the codes the hint accepts: `bg`, `cs`, `da`, `de`, `el`, `en`, `es`, `et`, `fi`, `fr`, `hr`, `hu`, `it`, `lt`, `lv`, `mt`, `nl`, `pl`, `pt`, `ro`, `ru`, `sk`, `sl`, `sv` and `uk`, plus `be`, `bs` and `sr`.
+
+## Speakers
+
+Speakers get stable IDs (`s1`, `s2`, …) numbered in the order they first speak. The diarizer's own labels are arbitrary, so ScribeKit renumbers them, and speakers that end up with no words are dropped.
+
+Rename them once you know who is who:
+
+```swift
+var transcript = try await scribe.transcribe(url)
+transcript.rename(speaker: "s1", to: "Anna")
+```
+
+Each word goes to the speaker whose turn overlaps it most, or to the nearest turn when none does. A new segment starts when the speaker changes, after a pause of 2 seconds, or at the first sentence end after 45 seconds.
+
+## Progress
+
+Pass a closure to follow the stages:
+
+```swift
+let transcript = try await scribe.transcribe(url) { stage in
+    switch stage {
+    case .loadingModels: print("Loading models")
+    case .transcribing(let track): print("Transcribing \(track)")
+    case .identifyingSpeakers: print("Finding speakers")
+    case .finishing: print("Finishing")
+    }
+}
+```
+
+The closure is called from the `Scribe` actor. Hop to the main actor before touching UI.
+
+## Diarization only
+
+`diarize(_:speakerCount:)` returns speaker turns without transcribing, for example to combine with another recognizer:
+
+```swift
+let turns = try await scribe.diarize(url)
+let segments = SegmentBuilder.segments(words: myWords, turns: turns)
+```

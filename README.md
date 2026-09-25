@@ -12,6 +12,8 @@ Everything runs on the Apple Neural Engine. No server, no API key, no Python.
 - Word timings, segments split on pauses and speaker turns
 - Pure-Swift segment builder and renderers you can use with any ASR
 
+Documentation: **[scribekit.lucaspiera.com](https://scribekit.lucaspiera.com)**
+
 Used by [EchoPad](https://github.com/pieralukasz/echopad).
 
 ## Requirements

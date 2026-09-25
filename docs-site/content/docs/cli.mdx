@@ -1,0 +1,42 @@
+---
+title: Command line
+description: The scribe command that ships with the package.
+---
+
+`scribe` is a small front end for trying ScribeKit on real files. Run it from a clone of the repository:
+
+```bash
+swift run -c release scribe <command>
+```
+
+The transcript goes to standard output; progress and a summary go to standard error, so you can redirect the result to a file.
+
+## Download the models
+
+```bash
+swift run -c release scribe prepare             # speech model only
+swift run -c release scribe prepare --diarize   # speech and speaker models
+```
+
+## Transcribe a file
+
+```bash
+swift run -c release scribe meeting.m4a --lang en --format md > meeting.md
+```
+
+| Option | Effect |
+| --- | --- |
+| `--lang <code>` | Language hint, for example `pl`. Detected when left out. |
+| `--no-diarize` | Skip speaker detection. |
+| `--speakers <n>` | Exact number of speakers. |
+| `--format <f>` | `md` (default), `txt`, `srt`, `vtt` or `json`. |
+
+## Transcribe a call
+
+```bash
+swift run -c release scribe conversation microphone.wav system.wav --me "Anna" --format srt
+```
+
+The first file is the microphone, the second the system audio. See [Call recordings](/docs/conversations). `--me` sets the name of the local speaker (default `Me`); the other options work as above.
+
+At the end, `scribe` prints the number of words and speakers, the length of the audio and how long it took.

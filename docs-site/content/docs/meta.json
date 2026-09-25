@@ -1,0 +1,15 @@
+{
+  "title": "ScribeKit",
+  "pages": [
+    "index",
+    "installation",
+    "---Guides---",
+    "transcribing",
+    "conversations",
+    "output",
+    "models",
+    "---Reference---",
+    "api",
+    "cli"
+  ]
+}

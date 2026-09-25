@@ -1,0 +1,80 @@
+---
+title: Output formats
+description: Render a transcript as Markdown, plain text, SRT, WebVTT or JSON.
+---
+
+`TranscriptRenderer` turns a `Transcript` into text. Pick a format at run time:
+
+```swift
+let text = try TranscriptRenderer.render(transcript, as: .srt)
+let url = folder.appendingPathComponent("call.\(TranscriptFormat.srt.fileExtension)")
+try text.write(to: url, atomically: true, encoding: .utf8)
+```
+
+| `TranscriptFormat` | Extension | Contents |
+| --- | --- | --- |
+| `.markdown` | `md` | Optional front matter and title, one paragraph per segment |
+| `.text` | `txt` | `Name: text`, one paragraph per segment |
+| `.srt` | `srt` | SubRip cues, `Name: text` |
+| `.vtt` | `vtt` | WebVTT cues with `<v Name>` voice tags |
+| `.json` | `json` | The `Transcript` value, pretty printed |
+
+`TranscriptFormat` is `CaseIterable` and has a `displayName` for pickers.
+
+## Markdown
+
+```swift
+let markdown = TranscriptRenderer.markdown(transcript, options: .init(
+    title: "Weekly sync",
+    metadata: [("date", "2026-09-25"), ("tags", "meeting")],
+    includeTimestamps: true,
+    preamble: "![[weekly-sync.m4a]]"
+))
+```
+
+```md
+---
+date: "2026-09-25"
+tags: "meeting"
+---
+
+# Weekly sync
+
+![[weekly-sync.m4a]]
+
+[00:00] **Anna:** Morning, everyone.
+
+[00:04] **Speaker 1:** Hi Anna.
+```
+
+- `metadata` becomes YAML front matter, in the order given. Values are written as quoted strings. Note apps such as Obsidian read it as properties.
+- `preamble` goes after the title, for example an audio embed.
+- Timestamps use `mm:ss`, or `h:mm:ss` past an hour.
+
+## Subtitles
+
+Segments are split into cues of at most about 7 seconds or 84 characters. A cue ends at the last comma or full stop when there is one, so lines read naturally. Each cue starts with the speaker name.
+
+```
+1
+00:00:00,000 --> 00:00:02,000
+Anna: Morning, everyone.
+```
+
+## JSON
+
+`Transcript`, `Segment`, `Speaker` and `Word` are `Codable`, so the JSON output decodes straight back:
+
+```swift
+let json = try TranscriptRenderer.render(transcript, as: .json)
+let decoded = try JSONDecoder().decode(Transcript.self, from: Data(json.utf8))
+```
+
+Times are seconds as `Double`.
+
+## Helpers
+
+- `TranscriptRenderer.clock(_:)`: `mm:ss` or `h:mm:ss`.
+- `TranscriptRenderer.duration(_:)`: `hh:mm:ss`.
+- `transcript.text`: all segments joined, without speakers or times.
+- `transcript.wordCount`.

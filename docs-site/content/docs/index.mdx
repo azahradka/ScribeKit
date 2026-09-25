@@ -1,0 +1,44 @@
+---
+title: Introduction
+description: On-device speech-to-text with speakers for Swift.
+---
+
+ScribeKit is a Swift package that turns an audio file into a transcript with speakers. It wraps [FluidAudio](https://github.com/FluidInference/FluidAudio)'s Core ML port of NVIDIA Parakeet TDT v3 and its offline speaker diarization in a small API, and renders the result as Markdown, plain text, SRT, WebVTT or JSON.
+
+Everything runs on the Mac or iPhone that calls it. There is no server, API key or Python runtime.
+
+```swift
+import ScribeKit
+
+let transcript = try await Scribe.shared.transcribe(url, options: .init(language: "en"))
+print(TranscriptRenderer.markdown(transcript))
+```
+
+## What it does
+
+- **Speech recognition** with Parakeet TDT 0.6B v3: 25 European languages, detected automatically, with word timings.
+- **Speaker diarization**: who spoke when, with speakers numbered in the order they first talk.
+- **Conversation mode** for calls recorded as two tracks, the microphone and the system audio. The microphone is always the local speaker, and only the other side is diarized.
+- **Echo removal**: words the microphone picked up from the speakers are dropped, so the other side is not transcribed twice.
+- **Readable segments**, split on speaker changes and pauses.
+- **Renderers** for Markdown with YAML front matter, plain text, SRT, WebVTT and JSON.
+
+The segment builder and the renderers are plain Swift with no models, so you can also feed them words and speaker turns from another recognizer.
+
+## Requirements
+
+| | |
+| --- | --- |
+| Platforms | macOS 14 or later, iOS 17 or later |
+| Swift | 6.0 tools |
+| Disk | about 460 MB for the speech model, 20 MB for the speaker model |
+| Network | only to download the models from Hugging Face, once |
+
+## Where next
+
+<Cards>
+  <Card title="Installation" href="/docs/installation" description="Add the package and download the models." />
+  <Card title="Transcribing a file" href="/docs/transcribing" description="Options, languages, speakers and progress." />
+  <Card title="Call recordings" href="/docs/conversations" description="Two tracks, one speaker per side, echo removed." />
+  <Card title="API reference" href="/docs/api" description="Every public type in one page." />
+</Cards>

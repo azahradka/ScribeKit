@@ -1,0 +1,48 @@
+---
+title: Call recordings
+description: Transcribe a call recorded as a microphone track and a system audio track.
+---
+
+Diarizing a whole call from one mixed file works, but it confuses voices that sound alike and has to guess which speaker is you. When the call is recorded as two aligned tracks, ScribeKit can do better:
+
+- everything on the **microphone** track is the local speaker,
+- only the **system audio** track, the other side of the call, is diarized.
+
+[SystemAudioKit](https://systemaudiokit.lucaspiera.com) records exactly that: `microphone.wav` and `system.wav` on one timeline.
+
+```swift
+let transcript = try await Scribe.shared.transcribeConversation(
+    microphone: recording.microphoneURL,
+    system: recording.systemAudioURL,
+    options: .init(language: "en", localSpeakerName: "Anna")
+)
+```
+
+The two files must start at the same moment, since segments from both are merged by time. Either track may be `nil`; with neither, the call throws `ScribeError.noAudio`.
+
+## What happens
+
+1. Both tracks are transcribed separately.
+2. **Echo removal.** Without headphones, the microphone also hears the other side through the speakers. A run of two or more microphone words that also appear on the system track within 0.6 seconds is dropped. A single shared word, such as "yes" or "okay", is kept, since it is probably real speech.
+3. The microphone words become the local speaker, with the ID `local` and `isLocal = true`.
+4. The system track is diarized into `remote-s1`, `remote-s2` and so on, named with `remoteSpeakerTemplate`. With `diarize: false`, the whole other side becomes one speaker, `remote`.
+5. The segments of both tracks are merged in time order.
+
+## Speaker count
+
+`speakerCount` counts everyone, including you. ScribeKit subtracts the local speaker before diarizing the system track:
+
+```swift
+// A call with you and two others.
+let options = TranscriptionOptions(speakerCount: 3, localSpeakerName: "Anna")
+```
+
+## Echo removal on its own
+
+The same step is available for words from any recognizer:
+
+```swift
+let cleaned = SegmentBuilder.removeEcho(microphone: micWords, system: systemWords, window: 0.6)
+```
+
+With headphones there is no echo, and nothing is removed.

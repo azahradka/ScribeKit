@@ -1,0 +1,49 @@
+---
+title: Installation
+description: Add ScribeKit to a Swift package or an Xcode project.
+---
+
+## Swift Package Manager
+
+Add the package to `Package.swift`:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/pieralukasz/ScribeKit.git", from: "0.1.0"),
+],
+targets: [
+    .target(name: "MyApp", dependencies: ["ScribeKit"]),
+]
+```
+
+In Xcode, use **File → Add Package Dependencies…** and paste `https://github.com/pieralukasz/ScribeKit`.
+
+ScribeKit pins FluidAudio to an exact version, so an update of FluidAudio cannot change your results without a new ScribeKit release.
+
+## Models
+
+Nothing is bundled. The first call that needs a model downloads it from Hugging Face and caches it in `~/Library/Application Support/FluidAudio/Models`:
+
+| Model | Folder | Size |
+| --- | --- | --- |
+| Parakeet TDT 0.6B v3 (speech) | `parakeet-tdt-0.6b-v3` | about 460 MB |
+| pyannote community-1 (speakers) | `speaker-diarization` | about 20 MB |
+
+Later runs load from the cache and need no network. Load them ahead of time with `prepare`, so the first transcription does not wait. See [Models](/docs/models).
+
+## Try it from the terminal
+
+The package ships a small `scribe` command:
+
+```bash
+git clone https://github.com/pieralukasz/ScribeKit.git
+cd ScribeKit
+swift run -c release scribe prepare --diarize
+swift run -c release scribe meeting.m4a --lang en
+```
+
+See [Command line](/docs/cli) for every option.
+
+## Licenses
+
+ScribeKit is MIT licensed. The models are not part of it: Parakeet is released by NVIDIA under CC-BY-4.0, the diarization model comes from pyannote, and both are converted to Core ML by FluidInference. Check their licenses before you ship.

@@ -1,0 +1,121 @@
+---
+title: API reference
+description: Every public type in ScribeKit.
+---
+
+## Scribe
+
+`public actor Scribe`: speech recognition and diarization. Holds the loaded models.
+
+| Member | Description |
+| --- | --- |
+| `static let shared` | Shared instance. Use it unless you need separate model memory. |
+| `static let supportedLanguages: [String]` | Language codes accepted as a hint. |
+| `init()` | A new instance with its own models. |
+| `isSpeechModelLoaded`, `isDiarizationModelLoaded` | Whether the models are in memory. |
+| `prepare(diarization:progress:)` | Downloads and loads the models ahead of use. |
+| `unload()` | Frees model memory. |
+| `transcribeText(_:language:) -> String` | Plain text of a file. |
+| `words(_:language:) -> [Word]` | Timed words of a file. |
+| `transcribe(_:options:progress:) -> Transcript` | One file, with speakers by default. |
+| `transcribeConversation(microphone:system:options:progress:) -> Transcript` | A call recorded as two aligned tracks. |
+| `diarize(_:speakerCount:) -> [SegmentBuilder.Turn]` | Speaker turns only. |
+
+## TranscriptionOptions
+
+<TypeTable
+  type={{
+    language: { type: "String?", default: "nil", description: "ISO 639-1 code, or nil to detect." },
+    diarize: { type: "Bool", default: "true", description: "Label speakers." },
+    speakerCount: { type: "Int?", default: "nil", description: "Exact number of speakers, when known." },
+    localSpeakerName: { type: "String", default: '"Me"', description: "Name of the microphone side in conversation mode." },
+    remoteSpeakerTemplate: { type: "String", default: '"Speaker %d"', description: "Name of other speakers; %d becomes the number." },
+  }}
+/>
+
+## Transcript
+
+`Codable`, `Hashable`, `Sendable`.
+
+<TypeTable
+  type={{
+    segments: { type: "[Segment]", description: "In time order." },
+    speakers: { type: "[Speaker]", description: "In order of first speech." },
+    language: { type: "String?", description: "The language hint that was used, if any." },
+    duration: { type: "TimeInterval", description: "Length of the audio in seconds." },
+    text: { type: "String", description: "All segments joined, without speakers or times." },
+    wordCount: { type: "Int", description: "Number of words." },
+  }}
+/>
+
+- `speaker(for id: String?) -> Speaker?`
+- `mutating rename(speaker id: String, to name: String)`
+
+## Segment
+
+<TypeTable
+  type={{
+    speakerID: { type: "String?", description: "nil when diarization was off." },
+    start: { type: "TimeInterval", description: "Seconds from the start of the audio." },
+    end: { type: "TimeInterval", description: "Seconds from the start of the audio." },
+    text: { type: "String", description: "The words joined with tidy punctuation." },
+    words: { type: "[Word]", description: "Timed words." },
+  }}
+/>
+
+## Speaker
+
+<TypeTable
+  type={{
+    id: { type: "String", description: "s1, s2… for one file; local and remote-s1… for calls." },
+    name: { type: "String", description: "Display name. Change it with Transcript.rename." },
+    isLocal: { type: "Bool", description: "true for the microphone side of a call." },
+  }}
+/>
+
+## Word
+
+`text: String`, `start: TimeInterval`, `end: TimeInterval`.
+
+## TranscriptionStage
+
+`.loadingModels`, `.transcribing(track: String)`, `.identifyingSpeakers`, `.finishing`.
+
+## ModelProgress
+
+`model: Model` (`.speechRecognition` or `.speakerDiarization`), `fraction: Double?`, `detail: String`.
+
+## ScribeError
+
+- `.unsupportedLanguage(String)`: the language hint is not one of `supportedLanguages`.
+- `.noAudio`: `transcribeConversation` was given no track.
+
+## TranscriptRenderer
+
+| Member | Description |
+| --- | --- |
+| `render(_:as:markdown:) throws -> String` | Any `TranscriptFormat`. |
+| `markdown(_:options:) -> String` | Markdown with optional front matter. |
+| `text(_:) -> String` | `Name: text` paragraphs. |
+| `clock(_:)`, `duration(_:)` | Time formatting helpers. |
+
+`MarkdownOptions`: `title: String?`, `metadata: [(String, String)]`, `includeTimestamps: Bool` (default `true`), `preamble: String?`.
+
+## TranscriptFormat
+
+`.markdown` (`md`), `.text` (`txt`), `.srt`, `.vtt`, `.json`. Each has `fileExtension` and `displayName`.
+
+## SegmentBuilder
+
+Pure logic, no models. Use it with any recognizer.
+
+| Member | Description |
+| --- | --- |
+| `struct Turn` | `speakerID`, `start`, `end`: one diarizer turn. |
+| `segments(words:turns:) -> [Segment]` | Attributes words to turns, then groups them. |
+| `group(_: [(Word, String?)]) -> [Segment]` | Groups words that already carry a speaker. |
+| `join(_: [Word]) -> String` | Joins words, keeping punctuation tight. |
+| `interleave(_: [[Segment]]) -> [Segment]` | Merges tracks in time order. |
+| `removeEcho(microphone:system:window:) -> [Word]` | Drops microphone words heard from the speakers. |
+| `PARAGRAPH_PAUSE` | 2 seconds: a longer pause starts a new segment. |
+| `MAX_SEGMENT_SECONDS` | 45 seconds: a longer segment is split at the next sentence end. |
