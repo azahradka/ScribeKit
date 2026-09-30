@@ -61,46 +61,47 @@ const install = `dependencies: [
 export default function HomePage() {
   return (
     <main className="flex flex-col">
-      <section className="hero-glow">
-        <div className="mx-auto flex max-w-5xl flex-col items-center px-6 pt-20 pb-14 text-center">
-          {/* biome-ignore lint/performance/noImgElement: static export serves plain files */}
-          <img
-            src={asset("/logo.svg")}
-            alt=""
-            width={88}
-            height={88}
-            className="mb-6 drop-shadow-xl"
-          />
-          <span className="mb-5 rounded-full border bg-fd-card px-3 py-1 text-xs font-medium text-fd-muted-foreground">
-            Swift package · MIT · macOS 14 and iOS 17
-          </span>
-          <h1 className="text-5xl font-bold tracking-tight sm:text-6xl">
-            Transcripts with <span className="text-fd-primary">speakers</span>,{" "}
-            <span className="whitespace-nowrap">on&#8209;device.</span>
-          </h1>
-          <p className="mt-5 max-w-2xl text-lg text-fd-muted-foreground">
-            ScribeKit turns audio files into transcripts that know who said
-            what. NVIDIA Parakeet v3 and speaker diarization run on the Apple
-            Neural Engine: no server, no API key, no Python.
-          </p>
-          <CallToAction className="mt-8 justify-center" />
-        </div>
-        <div className="mx-auto grid w-full gap-6 px-6 pb-20 text-left max-w-3xl [&>div]:min-w-0">
-          <div>
-            <p className="mb-2 text-sm font-semibold text-fd-muted-foreground">
-              Package.swift
+      <section className="border-b">
+        <div className="mx-auto grid w-full max-w-6xl gap-12 px-6 pt-16 pb-16 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-start lg:pt-20">
+          <div className="min-w-0">
+            <div className="mb-6 flex flex-wrap items-center gap-3">
+              {/* biome-ignore lint/performance/noImgElement: static export serves plain files */}
+              <img
+                src={asset("/logo.svg")}
+                alt=""
+                width={40}
+                height={40}
+                className="rounded-lg"
+              />
+              <span className="rounded-md border bg-fd-card px-2 py-1 font-mono text-xs text-fd-muted-foreground">
+                Swift package · MIT · macOS 14 and iOS 17
+              </span>
+            </div>
+            <h1 className="font-mono text-4xl font-bold tracking-tight sm:text-5xl">
+              Transcripts with <span className="text-fd-primary">speakers</span>
+              , <span className="whitespace-nowrap">on&#8209;device.</span>
+            </h1>
+            <p className="mt-5 text-lg text-fd-muted-foreground">
+              ScribeKit turns audio files into transcripts that know who said
+              what. NVIDIA Parakeet v3 and speaker diarization run on the Apple
+              Neural Engine: no server, no API key, no Python.
             </p>
-            <DynamicCodeBlock lang="swift" code={install} />
-            <p className="mt-5 text-sm text-fd-muted-foreground">
-              Swift 6. The models (about 460 MB for speech, 20 MB for speakers)
-              download from Hugging Face on first use and are cached on disk.
-            </p>
+            <CallToAction className="mt-8" />
           </div>
-          <div>
-            <p className="mb-2 text-sm font-semibold text-fd-muted-foreground">
-              Transcribe a meeting
-            </p>
-            <DynamicCodeBlock lang="swift" code={example} />
+          <div className="grid min-w-0 gap-6 [&>div]:min-w-0">
+            <div>
+              <CodeLabel>Package.swift</CodeLabel>
+              <DynamicCodeBlock lang="swift" code={install} />
+              <p className="mt-3 text-sm text-fd-muted-foreground">
+                Swift 6. The models (about 460 MB for speech, 20 MB for
+                speakers) download from Hugging Face on first use and are cached
+                on disk.
+              </p>
+            </div>
+            <div>
+              <CodeLabel>Transcribe a meeting</CodeLabel>
+              <DynamicCodeBlock lang="swift" code={example} />
+            </div>
           </div>
         </div>
       </section>
@@ -113,10 +114,12 @@ export default function HomePage() {
           {features.map((feature) => (
             <div
               key={feature.title}
-              className="rounded-2xl border bg-fd-card p-6"
+              className="rounded-lg border bg-fd-card p-6"
             >
-              <feature.icon className="mb-4 size-6 text-fd-primary" />
-              <h3 className="font-semibold">{feature.title}</h3>
+              <feature.icon className="mb-4 size-5 text-fd-primary" />
+              <h3 className="font-mono text-sm font-semibold">
+                {feature.title}
+              </h3>
               <p className="mt-1 text-sm text-fd-muted-foreground">
                 {feature.text}
               </p>
@@ -125,16 +128,16 @@ export default function HomePage() {
         </div>
       </Section>
 
-      <section className="mx-auto w-full max-w-5xl px-6 pb-24">
-        <div className="hero-glow rounded-3xl border bg-fd-card px-8 py-14 text-center">
-          <h2 className="text-3xl font-bold tracking-tight">
+      <section className="mx-auto w-full max-w-6xl px-6 pb-24">
+        <div className="rounded-lg border bg-fd-card px-8 py-12">
+          <h2 className="font-mono text-2xl font-bold tracking-tight sm:text-3xl">
             A few lines to a transcript
           </h2>
-          <p className="mx-auto mt-3 max-w-xl text-fd-muted-foreground">
+          <p className="mt-3 max-w-xl text-fd-muted-foreground">
             Add the package, call transcribe, render the result. The guides
             cover call recordings, output formats and model handling.
           </p>
-          <CallToAction className="mt-8 justify-center" />
+          <CallToAction className="mt-8" />
         </div>
       </section>
 
@@ -169,17 +172,25 @@ function CallToAction({ className }: { className?: string }) {
     <div className={`flex flex-wrap gap-3 ${className ?? ""}`}>
       <Link
         href="/docs"
-        className="rounded-full bg-fd-primary px-6 py-3 font-medium text-fd-primary-foreground transition hover:opacity-90"
+        className="rounded-md bg-fd-primary px-5 py-2.5 font-medium text-fd-primary-foreground transition hover:opacity-90"
       >
         Read the docs
       </Link>
       <a
         href={repoUrl}
-        className="inline-flex items-center gap-2 rounded-full border bg-fd-card px-6 py-3 font-medium transition hover:bg-fd-accent"
+        className="inline-flex items-center gap-2 rounded-md border bg-fd-card px-5 py-2.5 font-medium transition hover:bg-fd-accent"
       >
         <GitHubMark /> View on GitHub
       </a>
     </div>
+  );
+}
+
+function CodeLabel({ children }: { children: ReactNode }) {
+  return (
+    <p className="mb-2 font-mono text-xs font-medium text-fd-muted-foreground">
+      {children}
+    </p>
   );
 }
 
@@ -193,11 +204,13 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="mx-auto w-full max-w-5xl px-6 py-16">
-      <p className="text-sm font-semibold uppercase tracking-wider text-fd-primary">
+    <section className="mx-auto w-full max-w-6xl px-6 py-16">
+      <p className="font-mono text-xs font-medium uppercase tracking-wider text-fd-primary">
         {eyebrow}
       </p>
-      <h2 className="mt-2 mb-8 text-3xl font-bold tracking-tight">{title}</h2>
+      <h2 className="mt-2 mb-8 font-mono text-2xl font-bold tracking-tight sm:text-3xl">
+        {title}
+      </h2>
       {children}
     </section>
   );

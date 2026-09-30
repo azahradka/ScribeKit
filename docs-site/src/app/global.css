@@ -1,6 +1,13 @@
 @import "tailwindcss";
-@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/vitepress.css";
 @import "fumadocs-ui/css/preset.css";
+
+/* Fonts come from next/font in layout.tsx. */
+@theme inline {
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
 
 /* ScribeKit accent, matched to the logo. */
 @theme {
@@ -25,20 +32,6 @@ html > body[data-scroll-locked] {
   margin-right: 0px !important;
   /* biome-ignore lint/complexity/noImportantStyles: same override for the CSS variable */
   --removed-body-scroll-bar-size: 0px !important;
-}
-
-.hero-glow {
-  background:
-    radial-gradient(
-      60% 50% at 50% 0%,
-      hsla(252, 85%, 62%, 0.22),
-      transparent 70%
-    ),
-    radial-gradient(
-      40% 40% at 85% 20%,
-      hsla(200, 80%, 60%, 0.12),
-      transparent 70%
-    );
 }
 
 /* One-line steps are shorter than their 2rem number badge, so the badges
