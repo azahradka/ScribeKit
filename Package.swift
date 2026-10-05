@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
@@ -9,7 +9,8 @@ let package = Package(
         .executable(name: "scribe", targets: ["scribe"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.17.4"),
+        // No traits: leaves out the prebuilt NemoTextProcessing binary, which ScribeKit does not use.
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.17.4", traits: []),
     ],
     targets: [
         .target(
