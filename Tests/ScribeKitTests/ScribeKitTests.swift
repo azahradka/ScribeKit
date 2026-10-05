@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 @testable import ScribeKit
 
@@ -107,5 +108,92 @@ final class RendererTests: XCTestCase {
     func testSupportedLanguagesIncludePolish() {
         XCTAssertTrue(Scribe.supportedLanguages.contains("pl"))
         XCTAssertTrue(Scribe.supportedLanguages.contains("en"))
+    }
+}
+
+final class DiarizeTests: XCTestCase {
+    func testConfigFromSpeakerRange() throws {
+        let range = try Scribe.diarizerConfig(minSpeakers: 2, maxSpeakers: 4, exclusive: true)
+        XCTAssertEqual(range.clustering.minSpeakers, 2)
+        XCTAssertEqual(range.clustering.maxSpeakers, 4)
+        XCTAssertNil(range.clustering.numSpeakers)
+        XCTAssertTrue(range.postProcessing.exclusiveSegments)
+
+        let exact = try Scribe.diarizerConfig(minSpeakers: 3, maxSpeakers: 3, exclusive: false)
+        XCTAssertEqual(exact.clustering.numSpeakers, 3)
+        XCTAssertNil(exact.clustering.minSpeakers)
+        XCTAssertFalse(exact.postProcessing.exclusiveSegments)
+
+        let open = try Scribe.diarizerConfig(minSpeakers: nil, maxSpeakers: nil, exclusive: true)
+        XCTAssertNil(open.clustering.minSpeakers)
+        XCTAssertNil(open.clustering.maxSpeakers)
+        XCTAssertNil(open.clustering.numSpeakers)
+
+        XCTAssertThrowsError(try Scribe.diarizerConfig(minSpeakers: 0, maxSpeakers: nil, exclusive: true))
+        XCTAssertThrowsError(try Scribe.diarizerConfig(minSpeakers: 3, maxSpeakers: 2, exclusive: true))
+    }
+
+    /// Real model run on two synthesized voices. Skipped when the speaker model is not cached,
+    /// so the test never downloads anything.
+    func testDiarizesTwoVoices() async throws {
+        try XCTSkipUnless(Scribe.diarizationModelIsCached(), "speaker model not cached")
+        try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: "/usr/bin/say"), "no say")
+        Scribe.offlineMode = true
+        defer { Scribe.offlineMode = false }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let lines = [
+            ("Samantha", "Good morning. I wanted to go over the inspection results from last week before the client call."),
+            ("Daniel", "Sure. The second run found three new anomalies near the river crossing, all of them fairly shallow."),
+            ("Samantha", "Do we know whether they line up with the bending strain we saw in the earlier data?"),
+            ("Daniel", "Two of them do. The third one is on a straight section, so I would like another look at it."),
+        ]
+        var samples: [Float] = []
+        var expected: [(String, Double, Double)] = []
+        for (index, (voice, text)) in lines.enumerated() {
+            let aiff = folder.appendingPathComponent("\(index).aiff")
+            let wav = folder.appendingPathComponent("\(index).wav")
+            try run("/usr/bin/say", ["-v", voice, "-o", aiff.path, text])
+            try run("/usr/bin/afconvert", ["-f", "WAVE", "-d", "LEF32@16000", "-c", "1", aiff.path, wav.path])
+            let file = try AVAudioFile(forReading: wav)
+            let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)))
+            try file.read(into: buffer)
+            let start = Double(samples.count) / 16000
+            samples += Array(UnsafeBufferPointer(start: buffer.floatChannelData![0], count: Int(buffer.frameLength)))
+            expected.append((voice, start, Double(samples.count) / 16000))
+            samples += [Float](repeating: 0, count: 8000)
+        }
+        let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 16000, channels: 1))
+        let joined = folder.appendingPathComponent("two-voices.wav")
+        do {
+            let out = try AVAudioFile(forWriting: joined, settings: format.settings)
+            let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)))
+            buffer.frameLength = AVAudioFrameCount(samples.count)
+            samples.withUnsafeBufferPointer { buffer.floatChannelData![0].update(from: $0.baseAddress!, count: samples.count) }
+            try out.write(from: buffer)
+        }
+
+        let turns = try await Scribe().diarize(url: joined)
+        XCTAssertEqual(Set(turns.map(\.speakerID)).count, 2, "\(turns)")
+        // Each spoken line is mostly covered by one speaker, and consecutive lines by different ones.
+        let owners = expected.map { _, start, end in
+            Dictionary(grouping: turns, by: \.speakerID).mapValues { group in
+                group.reduce(0) { $0 + max(0, min(end, $1.end) - max(start, $1.start)) }
+            }.max { $0.value < $1.value }?.key
+        }
+        XCTAssertNotEqual(owners[0], owners[1])
+        XCTAssertEqual(owners[0], owners[2])
+        XCTAssertEqual(owners[1], owners[3])
+    }
+
+    private func run(_ path: String, _ arguments: [String]) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = arguments
+        try process.run()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0, "\(path) \(arguments)")
     }
 }

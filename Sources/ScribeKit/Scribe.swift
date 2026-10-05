@@ -39,6 +39,14 @@ public struct TranscriptionOptions: Sendable, Equatable {
     }
 }
 
+/// Progress of ``Scribe/diarize(url:minSpeakers:maxSpeakers:exclusive:progress:)``.
+public enum DiarizationProgress: Sendable, Equatable {
+    /// Downloading (first time) or loading the speaker model; `fraction` is 0…1 when known.
+    case model(fraction: Double?, detail: String)
+    /// Finding speakers; `fraction` of the audio done, 0…1.
+    case diarizing(fraction: Double)
+}
+
 /// Stage of a running transcription, for progress UI.
 public enum TranscriptionStage: Sendable, Equatable {
     case loadingModels
@@ -50,11 +58,14 @@ public enum TranscriptionStage: Sendable, Equatable {
 public enum ScribeError: LocalizedError, Sendable {
     case unsupportedLanguage(String)
     case noAudio
+    case invalidSpeakerRange(min: Int?, max: Int?)
 
     public var errorDescription: String? {
         switch self {
         case .unsupportedLanguage(let code): return "Parakeet v3 does not support the language '\(code)'."
         case .noAudio: return "There is no audio to transcribe."
+        case .invalidSpeakerRange(let min, let max):
+            return "The speaker range \(min.map(String.init) ?? "any")–\(max.map(String.init) ?? "any") is not valid."
         }
     }
 }
@@ -83,6 +94,10 @@ public actor Scribe {
     private var diarizerLoading: Task<DiarizerBox, Error>?
     /// Diarizers configured for a fixed speaker count, keyed by that count.
     private var countedDiarizers: [Int: DiarizerBox] = [:]
+    /// The offline diarizer's Core ML models, shared by every ``diarize(url:minSpeakers:maxSpeakers:exclusive:progress:)``
+    /// call whatever its configuration. Loaded without the speech model.
+    private var speakerModels: OfflineDiarizerModels?
+    private var speakerModelsLoading: Task<OfflineDiarizerModels, Error>?
 
     public init() {}
 
@@ -104,6 +119,33 @@ public actor Scribe {
         asr = nil
         diarizer = nil
         countedDiarizers = [:]
+        speakerModels = nil
+    }
+
+    /// Downloads (first time, about 30 MB) and loads only the speaker diarization model, not the
+    /// speech model. Safe to call repeatedly. ``diarize(url:minSpeakers:maxSpeakers:exclusive:progress:)``
+    /// calls it itself; call it ahead to download the model at a time of your choosing.
+    public func prepareDiarizationModel(progress: (@Sendable (ModelProgress) -> Void)? = nil) async throws {
+        _ = try await speakerModel(progress: progress)
+    }
+
+    private func speakerModel(progress: (@Sendable (ModelProgress) -> Void)?) async throws -> OfflineDiarizerModels {
+        if let speakerModels { return speakerModels }
+        if let speakerModelsLoading { return try await speakerModelsLoading.value }
+        let task = Task<OfflineDiarizerModels, Error> {
+            progress?(ModelProgress(model: .speakerDiarization, fraction: nil, detail: "Loading speaker model…"))
+            let models = try await OfflineDiarizerModels.load(progressHandler: { update in
+                progress?(ModelProgress(model: .speakerDiarization, fraction: update.fractionCompleted,
+                                        detail: Self.describe(update.phase)))
+            })
+            progress?(ModelProgress(model: .speakerDiarization, fraction: 1, detail: "Speaker model ready"))
+            return models
+        }
+        speakerModelsLoading = task
+        defer { speakerModelsLoading = nil }
+        let models = try await task.value
+        speakerModels = models
+        return models
     }
 
     private func speechModel(progress: (@Sendable (ModelProgress) -> Void)?) async throws -> AsrManager {
@@ -183,7 +225,13 @@ public actor Scribe {
         let speech = MLModelConfigurationUtils.defaultModelsDirectory(for: .parakeetV3)
         guard AsrModels.modelsExist(at: speech, version: .v3, encoderPrecision: .int8),
               cachedRevisionMatches(.parakeetV3, at: speech) else { return false }
-        guard diarization else { return true }
+        return !diarization || diarizationModelIsCached()
+    }
+
+    /// Whether the speaker diarization model alone is cached at the revision FluidAudio would
+    /// download, so ``prepareDiarizationModel(progress:)`` needs no network. Says nothing about
+    /// the speech model.
+    public nonisolated static func diarizationModelIsCached() -> Bool {
         let speakers = MLModelConfigurationUtils.defaultModelsDirectory(for: .diarizer)
         return ModelNames.OfflineDiarizer.requiredModels.allSatisfy {
             FileManager.default.fileExists(atPath: speakers.appendingPathComponent($0).path)
@@ -316,6 +364,47 @@ public actor Scribe {
         return try await box.turns(for: url)
     }
 
+    /// Speaker turns of a file from FluidAudio's offline (pyannote community-1, VBx) diarizer alone:
+    /// no speech recognition, and the speech model is never downloaded or loaded.
+    ///
+    /// - Parameters:
+    ///   - minSpeakers, maxSpeakers: bounds on the number of speakers, nil for no bound. Equal
+    ///     bounds ask for exactly that many speakers.
+    ///   - exclusive: when true, turns never overlap (later overlapping speech is trimmed).
+    /// - Returns: turns sorted by start, with FluidAudio's own speaker IDs (arbitrary labels).
+    public func diarize(url: URL, minSpeakers: Int? = nil, maxSpeakers: Int? = nil, exclusive: Bool = true,
+                        progress: (@Sendable (DiarizationProgress) -> Void)? = nil) async throws -> [SegmentBuilder.Turn] {
+        let config = try Self.diarizerConfig(minSpeakers: minSpeakers, maxSpeakers: maxSpeakers, exclusive: exclusive)
+        let modelProgress: (@Sendable (ModelProgress) -> Void)? = progress.map { report in
+            { @Sendable update in report(.model(fraction: update.fraction, detail: update.detail)) }
+        }
+        let models = try await speakerModel(progress: modelProgress)
+        progress?(.diarizing(fraction: 0))
+        let box = DiarizerBox(models: models, config: config)
+        let turns = try await box.turns(for: url) { done, total in
+            progress?(.diarizing(fraction: total > 0 ? min(1, Double(done) / Double(total)) : 0))
+        }
+        return turns.filter { $0.end > $0.start }.sorted { ($0.start, $0.end) < ($1.start, $1.end) }
+    }
+
+    /// The offline diarizer configuration for a speaker range: community-1 defaults otherwise.
+    nonisolated static func diarizerConfig(minSpeakers: Int?, maxSpeakers: Int?, exclusive: Bool) throws -> OfflineDiarizerConfig {
+        if let minSpeakers, minSpeakers < 1 { throw ScribeError.invalidSpeakerRange(min: minSpeakers, max: maxSpeakers) }
+        if let maxSpeakers, maxSpeakers < max(1, minSpeakers ?? 1) {
+            throw ScribeError.invalidSpeakerRange(min: minSpeakers, max: maxSpeakers)
+        }
+        var config = OfflineDiarizerConfig.default
+        if let minSpeakers, minSpeakers == maxSpeakers {
+            config.clustering.numSpeakers = minSpeakers
+        } else {
+            config.clustering.minSpeakers = minSpeakers
+            config.clustering.maxSpeakers = maxSpeakers
+        }
+        config.postProcessing.exclusiveSegments = exclusive
+        try config.validate()
+        return config
+    }
+
     // MARK: - Internals
 
     private func recognize(_ url: URL, language code: String?) async throws -> ASRResult {
@@ -370,14 +459,21 @@ final class DiarizerBox: @unchecked Sendable {
         self.manager = manager
     }
 
+    /// A diarizer with `config` over models that are already loaded.
+    convenience init(models: OfflineDiarizerModels, config: OfflineDiarizerConfig) {
+        let manager = OfflineDiarizerManager(config: config)
+        manager.initialize(models: models)
+        self.init(manager: manager)
+    }
+
     static func load(config: OfflineDiarizerConfig) async throws -> DiarizerBox {
         let manager = OfflineDiarizerManager(config: config)
         try await manager.prepareModels()
         return DiarizerBox(manager: manager)
     }
 
-    func turns(for url: URL) async throws -> [SegmentBuilder.Turn] {
-        let result = try await manager.process(url)
+    func turns(for url: URL, progress: (@Sendable (Int, Int) -> Void)? = nil) async throws -> [SegmentBuilder.Turn] {
+        let result = try await manager.process(url, progressCallback: progress)
         return result.segments.map {
             SegmentBuilder.Turn(speakerID: $0.speakerId, start: TimeInterval($0.startTimeSeconds),
                                 end: TimeInterval($0.endTimeSeconds))

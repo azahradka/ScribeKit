@@ -6,6 +6,7 @@ import ScribeKit
 ///     scribe prepare [--diarize]
 ///     scribe <audio> [--lang pl] [--no-diarize] [--speakers N] [--format md|txt|srt|vtt|json]
 ///     scribe conversation <microphone.wav> <system.wav> [--lang pl] [--me "Name"] [--format …]
+///     scribe diarize <audio> [--min N] [--max N] [--overlap]
 @main
 struct ScribeCLI {
     static func main() async {
@@ -37,6 +38,27 @@ struct ScribeCLI {
             if first == "prepare" {
                 try await scribe.prepare(diarization: flag("--diarize"), progress: progress)
                 fputs("\nModels ready.\n", stderr)
+                return
+            }
+            if first == "diarize" {
+                let minSpeakers = option("--min").flatMap(Int.init)
+                let maxSpeakers = option("--max").flatMap(Int.init)
+                let exclusive = !flag("--overlap")
+                guard args.count >= 2 else { return usage() }
+                let turns = try await scribe.diarize(
+                    url: URL(fileURLWithPath: args[1]), minSpeakers: minSpeakers, maxSpeakers: maxSpeakers,
+                    exclusive: exclusive, progress: { update in
+                        switch update {
+                        case .model(_, let detail): fputs("\rSpeaker model: \(detail)      ", stderr)
+                        case .diarizing(let fraction): fputs("\rDiarizing: \(Int(fraction * 100))%      ", stderr)
+                        }
+                    })
+                for turn in turns {
+                    print(String(format: "%.2f\t%.2f\t%@", turn.start, turn.end, turn.speakerID))
+                }
+                let elapsed = clock.now - started
+                fputs("\nDone: \(turns.count) turns, \(Set(turns.map(\.speakerID)).count) speakers in "
+                      + "\(elapsed.formatted(.units(allowed: [.seconds], fractionalPart: .show(length: 1)))).\n", stderr)
                 return
             }
 
@@ -74,6 +96,7 @@ struct ScribeCLI {
         usage: scribe prepare [--diarize]
                scribe <audio> [--lang pl] [--no-diarize] [--speakers N] [--format md|txt|srt|vtt|json]
                scribe conversation <microphone.wav> <system.wav> [--lang pl] [--me "Name"] [--format …]
+               scribe diarize <audio> [--min N] [--max N] [--overlap]
         """)
     }
 }
