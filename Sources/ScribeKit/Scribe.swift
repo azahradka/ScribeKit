@@ -161,6 +161,43 @@ public actor Scribe {
         }
     }
 
+    // MARK: - Model downloads
+
+    /// Downloads models only from `baseURL`, ignoring the `REGISTRY_URL` and `MODEL_REGISTRY_URL`
+    /// environment variables, and fetches the speech model at commit `speechModelRevision`
+    /// instead of `main`. Call before ``prepare(diarization:progress:)``.
+    public nonisolated static func pinDownloads(baseURL: String, speechModelRevision: String) {
+        ModelRegistry.baseURL = baseURL
+        ModelRegistry.revisionOverrides[Repo.parakeetV3.remotePath] = speechModelRevision
+    }
+
+    /// When true, models load only from the cache and nothing is downloaded.
+    public nonisolated static var offlineMode: Bool {
+        get { ModelHub.offlineMode }
+        set { ModelHub.offlineMode = newValue }
+    }
+
+    /// Whether the models ``prepare(diarization:progress:)`` loads are already cached at the
+    /// revisions FluidAudio would download, so preparing them needs no network.
+    public nonisolated static func modelsAreCached(diarization: Bool) -> Bool {
+        let speech = MLModelConfigurationUtils.defaultModelsDirectory(for: .parakeetV3)
+        guard AsrModels.modelsExist(at: speech, version: .v3, encoderPrecision: .int8),
+              cachedRevisionMatches(.parakeetV3, at: speech) else { return false }
+        guard diarization else { return true }
+        let speakers = MLModelConfigurationUtils.defaultModelsDirectory(for: .diarizer)
+        return ModelNames.OfflineDiarizer.requiredModels.allSatisfy {
+            FileManager.default.fileExists(atPath: speakers.appendingPathComponent($0).path)
+        } && cachedRevisionMatches(.diarizer, at: speakers)
+    }
+
+    /// Same rule as FluidAudio's internal `ModelCache.matchesRevision`: a cache without a
+    /// revision marker holds `main`, and a pinned revision needs a matching marker.
+    private nonisolated static func cachedRevisionMatches(_ repo: Repo, at folder: URL) -> Bool {
+        let expected = ModelRegistry.revisionOverrides[repo.remotePath] ?? repo.revision
+        let marker = try? String(contentsOf: folder.appendingPathComponent(".fluidaudio-revision"), encoding: .utf8)
+        return (marker?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "main") == expected
+    }
+
     // MARK: - Transcription
 
     /// Plain text of a file, no speakers. For dictation-style use.
