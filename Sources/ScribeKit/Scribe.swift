@@ -190,6 +190,13 @@ public actor Scribe {
         } && cachedRevisionMatches(.diarizer, at: speakers)
     }
 
+    /// Drops FluidAudio log messages below warning level and stops copying them to stderr.
+    /// FluidAudio's debug lines can contain transcript text.
+    public nonisolated static func quietModelLogs() {
+        AppLogger.minimumLevel = .warning
+        AppLogger.mirrorsToConsole = false
+    }
+
     /// Same rule as FluidAudio's internal `ModelCache.matchesRevision`: a cache without a
     /// revision marker holds `main`, and a pinned revision needs a matching marker.
     private nonisolated static func cachedRevisionMatches(_ repo: Repo, at folder: URL) -> Bool {
